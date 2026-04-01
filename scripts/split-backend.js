@@ -15,7 +15,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 
-const PART_SIZE = Math.floor(1.8 * 1024 * 1024 * 1024); // 1.8 GB
+const PART_SIZE = 500 * 1024 * 1024; // 500 MB — well under GitHub's 2 GB limit
 const SRC_DIR = path.join(__dirname, '..', 'python-dist', 'murmur-backend');
 const OUT_DIR = path.join(__dirname, '..', 'release-assets');
 const ZIP_PATH = path.join(OUT_DIR, 'murmur-backend.zip');
