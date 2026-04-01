@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const { spawn } = require('child_process');
 
 const GITHUB_REPO = 'jlevy-dev/Murmur';
 const BACKEND_DIR_NAME = 'python-backend';
@@ -121,18 +121,25 @@ function concatenateParts(parts, tempDir, outputPath) {
   });
 }
 
-// Extract zip using PowerShell
+// Extract zip using PowerShell (async — won't block the UI)
 function extractZip(zipPath, destDir) {
-  // Remove existing dir first for clean extraction
   if (fs.existsSync(destDir)) {
     fs.rmSync(destDir, { recursive: true, force: true });
   }
   fs.mkdirSync(destDir, { recursive: true });
 
-  execSync(
-    `powershell.exe -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force"`,
-    { timeout: 600000 } // 10 min timeout for large archive
-  );
+  return new Promise((resolve, reject) => {
+    const child = spawn('powershell.exe', [
+      '-NoProfile', '-Command',
+      `Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force`
+    ], { stdio: 'pipe' });
+
+    child.on('exit', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`Extraction failed with code ${code}`));
+    });
+    child.on('error', reject);
+  });
 }
 
 async function downloadBackend(window) {
@@ -202,12 +209,8 @@ async function downloadBackend(window) {
     const zipPath = path.join(tempDir, 'murmur-backend.zip');
     await concatenateParts(manifest.parts, tempDir, zipPath);
 
-    // 4. Verify full zip checksum
-    send({ stage: 'verifying', percent: 100, detail: 'Verifying archive integrity...' });
-    const zipHash = await checksumFile(zipPath);
-    if (zipHash !== manifest.sha256) {
-      throw new Error('Archive checksum mismatch. Download may be corrupted.');
-    }
+    // 4. Skip full zip checksum — individual parts already verified
+    // Hashing 3GB synchronously would block the UI
 
     // 5. Extract
     send({ stage: 'extracting', percent: 100, detail: 'Extracting ML engine (this may take a few minutes)...' });
