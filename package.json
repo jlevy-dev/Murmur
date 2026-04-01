@@ -1,12 +1,13 @@
 {
   "name": "murmur",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Privacy-focused meeting capture & transcription for Windows — local Whisper, Obsidian output",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
     "build:python": "cd python && python build.py",
-    "build": "npm run build:python && electron-builder --win",
+    "build": "electron-builder --win",
+    "split-backend": "node scripts/split-backend.js",
     "postinstall": "electron-builder install-app-deps"
   },
   "build": {
@@ -19,16 +20,10 @@
     "files": [
       "main.js",
       "preload.js",
+      "backend-downloader.js",
       "renderer/**/*",
       "assets/**/*",
       "node_modules/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "python-dist/murmur-backend",
-        "to": "python-backend",
-        "filter": ["**/*"]
-      }
     ]
   },
   "dependencies": {

@@ -65,6 +65,29 @@
 
     <!-- Main content -->
     <main id="main">
+      <!-- Backend Download -->
+      <div id="view-download" class="view">
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.3">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          <h2 id="download-title">ML Engine Required</h2>
+          <p id="download-desc">Murmur needs to download the ML engine (~4.7 GB) for transcription, diarization, and summarization.<br>This only happens once.</p>
+          <button id="btn-start-download" class="btn-primary" style="margin-top: 16px;">Download ML Engine</button>
+          <div id="download-progress-section" class="hidden" style="margin-top: 24px; width: 100%; max-width: 420px;">
+            <div id="download-stage" style="margin-bottom: 8px; color: var(--text-muted); font-size: 13px;">Preparing...</div>
+            <div class="progress-bar-lg">
+              <div id="download-progress-fill" class="progress-fill"></div>
+            </div>
+            <div id="download-detail" style="margin-top: 6px; font-size: 12px; color: var(--text-muted);"></div>
+          </div>
+          <div id="download-error" class="hidden" style="color: #e74c3c; margin-top: 12px; font-size: 13px;"></div>
+          <button id="btn-retry-download" class="btn-ghost hidden" style="margin-top: 8px;">Retry Download</button>
+        </div>
+      </div>
+
       <!-- Idle -->
       <div id="view-idle" class="view active">
         <div class="empty-state">

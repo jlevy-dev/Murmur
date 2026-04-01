@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const WebSocket = require('ws');
+const { getBackendDir, getBackendExePath, isBackendInstalled, downloadBackend } = require('./backend-downloader');
 
 // Force Electron to use the discrete GPU instead of integrated
 app.commandLine.appendSwitch('force_high_performance_gpu');
@@ -96,13 +97,20 @@ function startPython() {
   const pyDir = path.join(__dirname, 'python');
   const env = { ...process.env, PYTHONUNBUFFERED: '1', CUDA_VISIBLE_DEVICES: '0' };
 
-  // In packaged app, extraResources are at process.resourcesPath/python-backend
-  // In dev, check python-dist/murmur-backend relative to project root
+  // Priority 1: Downloaded backend in userData (from GitHub release)
+  const userDataExe = getBackendExePath();
+  // Priority 2: Bundled with app via extraResources (legacy)
   const packagedExe = path.join(process.resourcesPath, 'python-backend', 'murmur-backend.exe');
+  // Priority 3: Local build (dev)
   const devExe = path.join(__dirname, 'python-dist', 'murmur-backend', 'murmur-backend.exe');
   let cmd, args, cwd;
 
-  if (fs.existsSync(packagedExe)) {
+  if (fs.existsSync(userDataExe)) {
+    cmd = userDataExe;
+    args = [];
+    cwd = getBackendDir();
+    console.log(`[Murmur] Starting downloaded Python backend: ${cmd}`);
+  } else if (fs.existsSync(packagedExe)) {
     cmd = packagedExe;
     args = [];
     cwd = path.join(process.resourcesPath, 'python-backend');
@@ -304,12 +312,25 @@ function createWindow() {
 
 app.whenReady().then(() => {
   createWindow();
-  startPython();
 
-  // If Python server was already running, try connecting immediately
-  setTimeout(() => {
-    if (!ws) connectWebSocket();
-  }, 1000);
+  // Check if backend is installed (downloaded or bundled or dev)
+  const hasBackend = isBackendInstalled()
+    || fs.existsSync(path.join(process.resourcesPath, 'python-backend', 'murmur-backend.exe'))
+    || fs.existsSync(path.join(__dirname, 'python-dist', 'murmur-backend', 'murmur-backend.exe'))
+    || fs.existsSync(path.join(__dirname, 'python', 'server.py'));
+
+  if (!hasBackend) {
+    // Tell renderer to show download UI
+    mainWindow.webContents.on('did-finish-load', () => {
+      send('backend-missing', true);
+    });
+  } else {
+    startPython();
+    // If Python server was already running, try connecting immediately
+    setTimeout(() => {
+      if (!ws) connectWebSocket();
+    }, 1000);
+  }
 
   globalShortcut.register('Ctrl+Shift+R', () => {
     send('toggle-recording');
@@ -366,6 +387,29 @@ app.on('will-quit', () => {
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+// ── IPC: Backend download ──────────────────────────────────────────────────
+ipcMain.handle('start-backend-download', async () => {
+  try {
+    await downloadBackend(mainWindow);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('check-backend-installed', () => isBackendInstalled());
+
+ipcMain.handle('launch-backend-after-download', () => {
+  if (isBackendInstalled()) {
+    startPython();
+    setTimeout(() => {
+      if (!ws) connectWebSocket();
+    }, 1000);
+    return true;
+  }
+  return false;
+});
 
 // ── IPC: Constants ──────────────────────────────────────────────────────────
 ipcMain.handle('get-models', () => MODELS);

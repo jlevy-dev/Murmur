@@ -35,6 +35,22 @@ contextBridge.exposeInMainWorld('murmur', {
   openFile: (filePath) => ipcRenderer.invoke('open-file', filePath),
   notify: (title, body) => ipcRenderer.invoke('notify', title, body),
 
+  // Backend download
+  startBackendDownload: () => ipcRenderer.invoke('start-backend-download'),
+  checkBackendInstalled: () => ipcRenderer.invoke('check-backend-installed'),
+  launchBackendAfterDownload: () => ipcRenderer.invoke('launch-backend-after-download'),
+
+  onBackendDownloadProgress: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on('backend-download-progress', handler);
+    return () => ipcRenderer.removeListener('backend-download-progress', handler);
+  },
+  onBackendMissing: (cb) => {
+    const handler = (_e, missing) => cb(missing);
+    ipcRenderer.on('backend-missing', handler);
+    return () => ipcRenderer.removeListener('backend-missing', handler);
+  },
+
   // Events from main process
   onStatus: (cb) => {
     const handler = (_e, msg) => cb(msg);

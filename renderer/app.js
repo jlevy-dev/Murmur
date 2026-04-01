@@ -35,6 +35,7 @@ let sysChunks = [];
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const $ = (sel) => document.querySelector(sel);
 const views = {
+  download: $('#view-download'),
   idle: $('#view-idle'),
   recording: $('#view-recording'),
   processing: $('#view-processing'),
@@ -192,6 +193,56 @@ async function init() {
   $('#btn-copy').addEventListener('click', copyTranscript);
   $('#btn-new').addEventListener('click', newRecording);
   $('#btn-summarize').addEventListener('click', summarizeTranscript);
+
+  // ── Backend download (first-run on fresh install) ──────────────────────
+  window.murmur.onBackendMissing((missing) => {
+    if (missing) {
+      showView('download');
+      btnRecord.disabled = true;
+    }
+  });
+
+  window.murmur.onBackendDownloadProgress((data) => {
+    const stageEl = $('#download-stage');
+    const fillEl = $('#download-progress-fill');
+    const detailEl = $('#download-detail');
+    const pct = Math.round(data.percent || 0);
+
+    fillEl.style.width = pct + '%';
+
+    switch (data.stage) {
+      case 'fetching-manifest':
+        stageEl.textContent = 'Fetching download info...';
+        break;
+      case 'downloading':
+        stageEl.textContent = `Downloading ML engine... ${pct}%`;
+        break;
+      case 'verifying':
+        stageEl.textContent = 'Verifying...';
+        break;
+      case 'assembling':
+        stageEl.textContent = 'Assembling archive...';
+        break;
+      case 'extracting':
+        stageEl.textContent = 'Extracting ML engine — this may take a few minutes...';
+        break;
+      case 'done':
+        stageEl.textContent = 'ML engine installed!';
+        onBackendDownloadComplete();
+        break;
+      case 'error':
+        stageEl.textContent = 'Download failed';
+        $('#download-error').textContent = data.detail || 'Unknown error';
+        $('#download-error').classList.remove('hidden');
+        $('#btn-retry-download').classList.remove('hidden');
+        break;
+    }
+
+    if (data.detail) detailEl.textContent = data.detail;
+  });
+
+  $('#btn-start-download').addEventListener('click', startBackendDownload);
+  $('#btn-retry-download').addEventListener('click', startBackendDownload);
 
   // ── Onboarding (first-run) ───────────────────────────────────────────────
   if (!settings.vaultPath) {
@@ -918,6 +969,35 @@ function showOnboarding(modelList, currentSettings) {
 
   // Show modal
   modal.classList.remove('hidden');
+}
+
+// ── Backend download ────────────────────────────────────────────────────────
+async function startBackendDownload() {
+  $('#btn-start-download').classList.add('hidden');
+  $('#btn-retry-download').classList.add('hidden');
+  $('#download-error').classList.add('hidden');
+  $('#download-progress-section').classList.remove('hidden');
+  $('#download-stage').textContent = 'Starting download...';
+  $('#download-progress-fill').style.width = '0%';
+  $('#download-detail').textContent = '';
+
+  const result = await window.murmur.startBackendDownload();
+  if (!result.success) {
+    $('#download-error').textContent = `Download failed: ${result.error}`;
+    $('#download-error').classList.remove('hidden');
+    $('#btn-retry-download').classList.remove('hidden');
+  }
+}
+
+async function onBackendDownloadComplete() {
+  await new Promise(r => setTimeout(r, 1500));
+
+  const launched = await window.murmur.launchBackendAfterDownload();
+  if (launched) {
+    btnRecord.disabled = false;
+    showView('idle');
+    statusText.textContent = 'ML backend starting...';
+  }
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
