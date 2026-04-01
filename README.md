@@ -1,212 +1,228 @@
-<h1 align="center">Tome</h1>
+<h1 align="center">Murmur</h1>
 
 <p align="center">
   <strong>Local meeting capture → Obsidian vault → AI agent pipeline. No cloud. No API keys. Your data.</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Swift-6.2-F05138?logo=swift&logoColor=white" alt="Swift 6.2" />
-  <img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&logoColor=white" alt="macOS 26+" />
+  <img src="https://img.shields.io/badge/Electron-35-47848F?logo=electron&logoColor=white" alt="Electron" />
+  <img src="https://img.shields.io/badge/Windows-10%2B-0078D6?logo=windows&logoColor=white" alt="Windows 10+" />
+  <img src="https://img.shields.io/badge/Python-3.12%2B-3776AB?logo=python&logoColor=white" alt="Python 3.12+" />
+  <img src="https://img.shields.io/badge/CUDA-RTX%20GPU-76B900?logo=nvidia&logoColor=white" alt="NVIDIA CUDA" />
   <img src="https://img.shields.io/badge/License-MIT-blue" alt="MIT License" />
-  <img src="https://img.shields.io/badge/Apple%20Silicon-Required-333333?logo=apple&logoColor=white" alt="Apple Silicon" />
 </p>
 
 ---
 
-Tome is a macOS app that captures meetings and voice memos, transcribes them locally with Parakeet-TDT v3, and drops structured `.md` files straight into your Obsidian vault. Everything runs on-device. Nothing phones home.
+Murmur is a **Windows refactor of [Tome](https://github.com/Gremble-io/Tome)**, the macOS Swift app for local meeting capture. Same idea, rebuilt from scratch as an Electron + Python app to run on Windows with NVIDIA GPU acceleration.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Gremble-io/Tome/main/assets/screenshot-idle.png" width="350" alt="Tome — idle state" />
-  <img src="https://raw.githubusercontent.com/Gremble-io/Tome/main/assets/screenshot-recording.png" width="350" alt="Tome — recording with spectrum visualizer" />
-</p>
+Everything runs on-device. Captures meetings and voice memos, transcribes them locally with faster-whisper, diarizes speakers with speechbrain, summarizes with Qwen2.5, and drops structured `.md` files straight into your Obsidian vault.
 
-## Background
+## Why Murmur?
 
-I'm a consultant who fell down the Obsidian rabbit hole. I built out a vault as a second brain: structured notes with YAML frontmatter, backlinks, tags, and a Claude agent layer that processes everything. Client files, meeting notes, action items, daily briefs, all flowing through the vault automatically.
+Tome was macOS-only, Apple Silicon-only. Murmur brings the same workflow to Windows:
 
-The problem was capture. I'm on calls all day and I don't take notes. I needed something that would listen, transcribe, and drop structured markdown into the vault where my agent could pick it up and do the rest. Pull out action items, update client files, connect the dots.
-
-I looked at Otter, Granola, Fireflies. They all lock your data in their cloud, their format, their walled garden. None of them output plain markdown. None of them are built to feed into an agent workflow.
-
-I started from [OpenGranola](https://github.com/yazinsai/OpenGranola), learned Swift along the way, and rebuilt it with a different audio pipeline, local ASR, speaker diarization, and vault-native output. If you're running Obsidian with any kind of AI agent setup, you probably have the same gap.
-
-## Why Tome?
-
-- **Plain markdown out.** YAML frontmatter, tags, timestamps. Your vault already knows what to do with it. No proprietary export, no copy-paste, no middleman.
-- **Built for the agent pipeline.** Tome is just the capture layer. You talk, it transcribes, your agent picks up the `.md` and does whatever you've wired it to do.
-- **Runs on your machine.** Parakeet-TDT v3 on Apple Silicon. No API keys, no accounts, no subscriptions, no data leaving the building.
+- **Plain markdown out.** YAML frontmatter, tags, timestamps. Your vault already knows what to do with it.
+- **Built for the agent pipeline.** Murmur is just the capture layer. You talk, it transcribes, your agent picks up the `.md` and does the rest.
+- **Runs on your machine.** faster-whisper + CUDA on your RTX GPU. No API keys, no accounts, no subscriptions, no data leaving the building.
+- **Better models.** Whisper large-v3 for transcription, speechbrain ECAPA-TDNN for speaker embeddings, Qwen2.5 for summarization. All local.
 
 ```
 speak → capture → vault → agent → knowledge base
 ```
 
-Tome does the first three. Your agent does the rest.
-
 ## Features
 
-- **Multilingual transcription** via Parakeet-TDT v3 ([FluidAudio](https://github.com/FluidInference/FluidAudio)) on Apple Silicon. 25 European languages, auto-detected. Nothing hits the network.
-- **Call Capture** grabs mic + system audio. Detects which conferencing app you're in (Teams, Zoom, Slack, etc.) and filters audio to just that app. Your Spotify and notification sounds stay out of the transcript.
-- **Voice Memo** is mic only. For quick thoughts, verbal notes, stream of consciousness. Saves to a separate folder so it doesn't clutter your meeting transcripts.
-- **Speaker diarization** runs after the call ends. pyannote splits the remote audio into Speaker 2, Speaker 3, Speaker 4. Not perfect, but way better than one wall of unattributed text.
-- **Vault-native output** writes `.md` with frontmatter: `type`, `created`, `attendees`, `tags`, `source_app`. Lands in your vault ready to process.
+- **Multilingual transcription** via [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (CTranslate2) on CUDA. Models from tiny to large-v3. Auto language detection.
+- **Call Capture** grabs mic + system audio via Electron's desktopCapturer. Detects which conferencing app you're in (Teams, Zoom, Slack, Discord).
+- **Voice Memo** is mic only. Quick thoughts, verbal notes, stream of consciousness.
+- **Live transcription** during voice memos — see your words appear in real-time as you speak.
+- **Speaker diarization** via [speechbrain](https://github.com/speechbrain/speechbrain) ECAPA-TDNN embeddings + agglomerative clustering. Splits remote audio into Speaker 2, Speaker 3, etc.
+- **Local summarization** with Qwen2.5 (1.5B/3B) or Phi-3.5 Mini. Generates summary, key points, and action items.
+- **Vault-native output** writes `.md` with frontmatter: `type`, `created`, `attendees`, `tags`, `source_app`.
 - **Privacy.** Hidden from screen sharing by default. No audio saved. Transcripts only.
-- **Silence auto-stop.** 120 seconds of dead air and it stops itself.
+- **Silence auto-stop.** Configurable dead air timeout.
+- **Model preloading.** Models load on startup so your first transcription is instant.
 
-## How It Works
+## Architecture
+
+Murmur runs as two processes:
 
 ```
-┌─────────────┐     ┌──────────────────┐     ┌───────────────┐
-│  Microphone  │────▶│                  │     │               │
-└─────────────┘     │  Tome            │     │  Obsidian     │
-                    │  ┌────────────┐  │────▶│  Vault        │
-┌─────────────┐     │  │ Parakeet   │  │     │  (.md files)  │
-│  System      │────▶│  │ TDT v3    │  │     │               │
-│  Audio       │     │  └────────────┘  │     └───────┬───────┘
-└─────────────┘     └──────────────────┘             │
+┌─────────────────────────────────┐     ┌──────────────────────────────┐
+│  Electron (UI + Audio Capture)  │     │  Python Backend (ML)         │
+│                                 │     │                              │
+│  ┌──────────┐  ┌─────────────┐  │ WS  │  ┌────────────────────────┐  │
+│  │ Renderer │  │ Main Process│◀─┼─────┼─▶│ WebSocket Server :9735 │  │
+│  │ (UI)     │  │ (IPC bridge)│  │     │  └────────┬───────────────┘  │
+│  └──────────┘  └─────────────┘  │     │           │                  │
+│                                 │     │  ┌────────▼───────────────┐  │
+│  Audio: MediaRecorder +         │     │  │ faster-whisper (CUDA)  │  │
+│  Web Audio API +                │     │  │ speechbrain (diarize)  │  │
+│  desktopCapturer (sys audio)    │     │  │ Qwen2.5 (summarize)   │  │
+└─────────────────────────────────┘     │  └────────────────────────┘  │
+                                        └──────────────────────────────┘
+                                                     │
                                                      ▼
-                                              ┌──────────────┐
-                                              │  AI Agent    │
-                                              │  Layer       │
-                                              │  (notes,     │
-                                              │   actions,   │
-                                              │   updates)   │
-                                              └──────────────┘
+                                        ┌──────────────────────┐
+                                        │  Obsidian Vault      │
+                                        │  (.md with YAML)     │
+                                        └──────────────────────┘
 ```
 
-1. **Capture** picks up mic audio + system audio from a specific conferencing app via ScreenCaptureKit.
-2. **Transcribe** runs VAD to detect speech segments, then Parakeet transcribes locally.
-3. **Diarize** splits the system audio into individual speakers after the session ends.
-4. **Write** drops structured `.md` with YAML frontmatter into your vault folder.
-5. **Agent picks up** whatever you've got downstream processes the transcript.
+- **Electron** handles the UI, audio capture, and acts as a WebSocket client
+- **Python** runs on `localhost:9735` as the ML backend, handling all inference
+- Audio is transferred as base64-encoded Float32 PCM over WebSocket
+
+## Project Structure
+
+```
+├── main.js                  # Electron main process + WebSocket client
+├── preload.js               # IPC bridge (contextBridge)
+├── renderer/
+│   ├── index.html           # UI markup
+│   ├── app.js               # UI logic, recording, live transcription
+│   └── styles.css           # Dark theme styles
+├── python/
+│   ├── server.py            # WebSocket ML server (asyncio)
+│   ├── transcribe.py        # faster-whisper wrapper
+│   ├── diarize.py           # speechbrain speaker diarization
+│   ├── summarize.py         # Qwen2.5 / Phi-3.5 summarization
+│   ├── gpu.py               # CUDA detection + VRAM info
+│   ├── audio_utils.py       # PCM decoding + silence trimming
+│   ├── build.py             # PyInstaller build script
+│   └── requirements.txt     # Python dependencies
+└── package.json             # Electron + electron-builder config
+```
+
+## Models
+
+| Component | Model | Size | GPU |
+|---|---|---|---|
+| **Transcription** | faster-whisper (tiny → large-v3) | 75 MB → 3 GB | CUDA float16 |
+| **Diarization** | speechbrain ECAPA-TDNN (spkrec-ecapa-voxceleb) | ~100 MB | CUDA |
+| **Summarization** | Qwen2.5-1.5B / 3B / Phi-3.5 Mini | 1.2 → 2.8 GB | CUDA float16 |
+
+Models are downloaded automatically on first use and cached locally.
+
+## Requirements
+
+- **Windows 10+**
+- **NVIDIA GPU** with CUDA support (RTX series recommended, 8GB+ VRAM)
+- **Python 3.12+** (for development)
+- **Node.js 18+** (for development)
+
+Falls back to CPU if no CUDA GPU is available, but transcription will be significantly slower.
+
+## Setup (Development)
+
+```bash
+# Clone
+git clone https://github.com/jlevy-dev/Murmur.git
+cd Murmur
+
+# Install Node dependencies
+npm install
+
+# Install Python dependencies (use CUDA 12.8 wheels)
+cd python
+pip install -r requirements.txt
+pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+cd ..
+
+# Run
+npm start
+```
+
+## Build (Portable Distribution)
+
+```bash
+# Build Python backend as standalone exe
+npm run build:python
+
+# Build Electron app (outputs to dist/win-unpacked/)
+npx electron-builder --win
+
+# Distribute the entire dist/win-unpacked/ folder
+# Users run Murmur.exe directly — no installation needed
+```
+
+The built app is ~5 GB (includes PyTorch + CUDA runtime + all ML dependencies).
 
 ## Output
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Gremble-io/Tome/main/assets/screenshot-vault-frontmatter.png?v=2" width="600" alt="Vault note with YAML frontmatter" />
-</p>
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/Gremble-io/Tome/main/assets/screenshot-vault-transcript.png?v=2" width="600" alt="Vault note transcript view" />
-</p>
 
 ```markdown
 ---
 type: meeting
-created: "2026-03-23"
-time: "10:00"
-duration: "18:42"
-source_app: "Zoom"
-attendees: ["You", "Speaker 2"]
+created: 2026-04-01T14:30:00.000Z
+time: "14:30:00"
+duration: "12m 45s"
+source_app: "Microsoft Teams"
+language: "English"
+attendees:
+  - "You"
+  - "Speaker 2"
+  - "Speaker 3"
 tags:
   - log/meeting
   - status/inbox
-  - source/tome
+  - source/murmur
 ---
 
-# Call Recording — 2026-03-23 10:00
+# Meeting Transcript
 
-**You** (10:00:03)
-Morning. Quick sync on the product launch. Where are we at?
+## Summary
 
-**Speaker 2** (10:00:07)
-We're in good shape. QA signed off yesterday, marketing assets
-are locked, landing page is live in staging.
-```
+- Discussed Q2 roadmap priorities and timeline
+- Agreed to move launch date to April 15th
 
-Voice memos use `type: fleeting` with a single speaker. Same structure, same frontmatter.
+**Key Points:**
+- Feature freeze is next Friday
+- QA needs two more days for regression testing
 
-## Build
+**Action Items:**
+- [ ] Update project timeline in Notion
+- [ ] Schedule follow-up with design team
 
-**Requirements:** Apple Silicon Mac, macOS 26+, Xcode 26.3+
+## Full Transcript
 
-```bash
-git clone https://github.com/Gremble-io/Tome.git
-cd Tome
-./scripts/build_swift_app.sh
-```
+[00:00] **You:** Morning. Quick sync on the launch timeline.
 
-Builds and installs to `/Applications`. First launch downloads the Parakeet ASR model (~600MB, cached after that).
+[00:03] **Speaker 2:** We're in good shape. QA signed off on the core flows yesterday.
 
-**Dev build:**
-
-```bash
-cd Tome
-swift build
-```
-
-## Permissions
-
-| Permission | When | Why |
-|---|---|---|
-| **Microphone** | All modes | Captures your voice |
-| **Screen Recording** | Call Capture only | ScreenCaptureKit needs this for system audio from conferencing apps |
-
-macOS re-prompts for Screen Recording permission roughly monthly. That's an OS thing, not Tome.
-
-## Architecture
-
-```
-Tome/Sources/Tome/
-├── App/
-│   ├── TomeApp.swift               # App entry point
-│   └── AppUpdaterController.swift  # Sparkle update controller
-├── Audio/
-│   ├── SystemAudioCapture.swift    # ScreenCaptureKit + per-app filtering
-│   └── MicCapture.swift            # AVAudioEngine mic input
-├── Models/
-│   ├── Models.swift                # Domain types (Utterance, Speaker, etc.)
-│   └── TranscriptStore.swift       # Observable transcript state
-├── Transcription/
-│   ├── TranscriptionEngine.swift   # Dual-stream capture + diarization
-│   └── StreamingTranscriber.swift  # VAD + Parakeet ASR pipeline
-├── Storage/
-│   ├── TranscriptLogger.swift      # .md output with YAML frontmatter
-│   └── SessionStore.swift          # Session metadata
-├── Settings/
-│   └── AppSettings.swift
-└── Views/
-    ├── ContentView.swift
-    ├── ControlBar.swift
-    ├── TranscriptView.swift
-    ├── WaveformView.swift
-    ├── SettingsView.swift
-    ├── OnboardingView.swift
-    └── CheckForUpdatesView.swift
+[00:08] **Speaker 3:** I still need two more days for regression on the API changes.
 ```
 
 ## Privacy
 
-- Transcription runs entirely on-device. No audio is ever sent anywhere.
-- No network calls. No analytics. No telemetry.
-- No audio is saved to disk. Only text transcripts.
-- The app window is hidden from screen sharing by default.
-- Transcripts are saved as plain `.md` files to a folder you choose.
+- All transcription, diarization, and summarization runs on-device
+- No network calls. No analytics. No telemetry
+- No audio is saved to disk — only text transcripts
+- The app window is hidden from screen sharing by default
+- Transcripts are saved as plain `.md` files to a folder you choose
 
-## Known Limitations
+## Tome → Murmur
 
-- **Apple Silicon only.** Parakeet and FluidAudio need Metal / ANE. No Intel.
-- **macOS 26+ only.**
-- **Screen Recording re-prompts monthly.** OS limitation.
-- **Diarization is imperfect.** Works well with headset mics. Laptop speakers with crosstalk will give you worse speaker separation.
-- **No live speaker labels.** Diarization runs after the session ends. During the call, remote audio shows as a single stream.
+Murmur is a Windows refactor of [Tome](https://github.com/Gremble-io/Tome), the original macOS Swift app. Same philosophy, different stack:
 
-## Troubleshooting
+| | Tome (macOS) | Murmur (Windows) |
+|---|---|---|
+| **Runtime** | Swift / SwiftUI | Electron / Node.js |
+| **Transcription** | Parakeet-TDT v3 (CoreML/ANE) | faster-whisper (CUDA) |
+| **Diarization** | pyannote | speechbrain ECAPA-TDNN |
+| **Summarization** | — | Qwen2.5 / Phi-3.5 (local) |
+| **Audio Capture** | ScreenCaptureKit | desktopCapturer + Web Audio API |
+| **GPU** | Apple Silicon (Metal/ANE) | NVIDIA CUDA |
 
-**"Tome is damaged and can't be opened"**
-
-This is macOS Gatekeeper blocking an unsigned app. Until a signed release is available:
-
-1. Right-click (or Control-click) `Tome.app` in `/Applications`
-2. Click **Open**
-3. In the dialog, click **Open** again
-
-You only need to do this once — after that, Tome launches normally.
-
-Alternatively, build from source (see [Build](#build) above) to avoid Gatekeeper entirely.
+Same idea: local-first, privacy-focused, vault-native output. Different platform, different tools.
 
 ## Credits
 
-Started from [OpenGranola](https://github.com/yazinsai/OpenGranola). Substantially rewritten from there.
+- [Tome](https://github.com/Gremble-io/Tome) — the original macOS app this was refactored from
+- [OpenGranola](https://github.com/yazinsai/OpenGranola) — the project that inspired Tome
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper) — CTranslate2 Whisper implementation
+- [speechbrain](https://github.com/speechbrain/speechbrain) — speaker recognition toolkit
+- [Qwen2.5](https://github.com/QwenLM/Qwen2.5) — local language model for summarization
 
 ## License
 

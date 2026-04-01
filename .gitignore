@@ -34,10 +34,5 @@ Desktop.ini
 .env
 .env.local
 
-# Old macOS source
-Tome/.build/
-Tome/.swiftpm/
-*.xcuserdata
-
 # Old source (no longer used)
 src/
