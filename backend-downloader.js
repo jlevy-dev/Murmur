@@ -90,12 +90,15 @@ function downloadFile(url, destPath, onProgress) {
   });
 }
 
-// SHA-256 checksum of a file
+// SHA-256 checksum of a file (streaming — handles files >2 GB)
 function checksumFile(filePath) {
-  const hash = crypto.createHash('sha256');
-  const data = fs.readFileSync(filePath);
-  hash.update(data);
-  return hash.digest('hex');
+  return new Promise((resolve, reject) => {
+    const hash = crypto.createHash('sha256');
+    const stream = fs.createReadStream(filePath);
+    stream.on('data', (chunk) => hash.update(chunk));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', reject);
+  });
 }
 
 // Concatenate split parts into a single file
@@ -187,7 +190,7 @@ async function downloadBackend(window) {
 
       // Verify part checksum
       send({ stage: 'verifying', percent: (totalDownloaded / totalSize) * 100, detail: `Verifying part ${p + 1}...` });
-      const hash = checksumFile(partPath);
+      const hash = await checksumFile(partPath);
       if (hash !== part.sha256) {
         fs.unlinkSync(partPath);
         throw new Error(`Checksum mismatch for ${part.filename}. Please retry.`);
@@ -201,7 +204,7 @@ async function downloadBackend(window) {
 
     // 4. Verify full zip checksum
     send({ stage: 'verifying', percent: 100, detail: 'Verifying archive integrity...' });
-    const zipHash = checksumFile(zipPath);
+    const zipHash = await checksumFile(zipPath);
     if (zipHash !== manifest.sha256) {
       throw new Error('Archive checksum mismatch. Download may be corrupted.');
     }
