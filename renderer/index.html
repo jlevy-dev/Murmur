@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; media-src 'self' blob:; script-src 'self'">
+  <title>Murmur</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Title bar drag region -->
+  <div id="titlebar">
+    <span class="titlebar-label">Murmur</span>
+  </div>
+
+  <!-- Main layout -->
+  <div id="app">
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div class="sidebar-section">
+        <h3>Mode</h3>
+        <div class="mode-toggle">
+          <button class="mode-btn active" data-mode="memo">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            Voice Memo
+          </button>
+          <button class="mode-btn" data-mode="call">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Call Capture
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>Controls</h3>
+        <button id="btn-record" class="btn-primary">
+          <span class="rec-dot"></span>
+          Start Recording
+        </button>
+        <div id="timer" class="timer">00:00</div>
+      </div>
+
+      <div class="sidebar-section">
+        <h3>Audio Level</h3>
+        <div id="meter-container">
+          <canvas id="meter" width="200" height="40"></canvas>
+        </div>
+      </div>
+
+      <div class="sidebar-section" id="model-info-section">
+        <h3>Model</h3>
+        <div id="model-badge" class="model-badge">Tiny — 39M params</div>
+        <div id="model-progress-bar" class="progress-bar hidden">
+          <div id="model-progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <div class="sidebar-section sidebar-bottom">
+        <button id="btn-settings" class="btn-ghost">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          Settings
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main id="main">
+      <!-- Idle -->
+      <div id="view-idle" class="view active">
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" opacity="0.3">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+          <h2>Ready to capture</h2>
+          <p>Select a mode and press Start Recording.<br>
+          All processing happens locally on your device — nothing leaves this machine.</p>
+        </div>
+      </div>
+
+      <!-- Recording -->
+      <div id="view-recording" class="view">
+        <div class="recording-header">
+          <div class="pulse-ring"></div>
+          <span class="recording-label">Recording…</span>
+          <span id="recording-mode-tag" class="recording-tag">MEMO</span>
+        </div>
+        <div id="waveform-container">
+          <canvas id="waveform" width="600" height="120"></canvas>
+        </div>
+
+        <div id="live-transcript-container" class="live-transcript-container">
+          <h4 class="live-transcript-label">Live Transcript</h4>
+          <div id="live-transcript" class="live-transcript"></div>
+        </div>
+        <p class="recording-hint">Audio is being captured. Click Stop to transcribe.</p>
+        <p class="recording-hint" id="silence-hint" style="display:none">Silence detected — auto-stop in <span id="silence-countdown"></span>s</p>
+      </div>
+
+      <!-- Processing -->
+      <div id="view-processing" class="view">
+        <div class="processing-spinner"></div>
+        <p id="processing-status">Processing audio…</p>
+        <div id="processing-progress-bar" class="progress-bar-lg hidden">
+          <div id="processing-progress-fill" class="progress-fill"></div>
+        </div>
+      </div>
+
+      <!-- Transcript -->
+      <div id="view-transcript" class="view">
+        <div class="transcript-meta">
+          <span id="meta-duration" class="meta-chip"></span>
+          <span id="meta-language" class="meta-chip"></span>
+          <span id="meta-mode" class="meta-chip"></span>
+        </div>
+        <div id="summary-section" class="summary-section hidden">
+          <div class="summary-header">
+            <h3>Summary</h3>
+          </div>
+          <div id="summary-content" class="summary-body"></div>
+        </div>
+        <div class="transcript-actions">
+          <button id="btn-summarize" class="btn-accent">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="21" y1="10" x2="3" y2="10"/><line x1="21" y1="6" x2="3" y2="6"/><line x1="15" y1="14" x2="3" y2="14"/><line x1="15" y1="18" x2="3" y2="18"/></svg>
+            Summarize
+          </button>
+          <button id="btn-save" class="btn-accent">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save to Vault
+          </button>
+          <button id="btn-copy" class="btn-ghost">Copy Text</button>
+          <button id="btn-new" class="btn-ghost">New Recording</button>
+        </div>
+        <div id="transcript-content" class="transcript-body"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Onboarding modal -->
+  <div id="onboarding-modal" class="modal hidden">
+    <div class="modal-backdrop onboarding-backdrop"></div>
+    <div class="modal-content onboarding-content">
+      <div class="onboarding-steps-indicator">
+        <span class="step-dot active" data-step="1"></span>
+        <span class="step-dot" data-step="2"></span>
+        <span class="step-dot" data-step="3"></span>
+      </div>
+
+      <!-- Step 1: Welcome -->
+      <div class="onboarding-step active" data-step="1">
+        <div class="onboarding-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </div>
+        <h2>Welcome to Murmur</h2>
+        <p class="onboarding-desc">Privacy-focused meeting capture &amp; transcription. Everything runs locally on your device.</p>
+        <div class="modal-actions onboarding-actions">
+          <button id="onboarding-start" class="btn-primary">Get Started</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Vault Setup -->
+      <div class="onboarding-step" data-step="2">
+        <h2>Choose your Obsidian vault</h2>
+        <p class="onboarding-desc">Murmur saves transcripts as Markdown files in your vault.</p>
+        <div class="setting-row" style="margin-top:16px;">
+          <label>Vault Folder</label>
+          <div class="setting-input-row">
+            <input type="text" id="onboarding-vault-path" readonly placeholder="Click Browse to select...">
+            <button id="onboarding-browse" class="btn-ghost">Browse</button>
+          </div>
+        </div>
+        <div class="modal-actions onboarding-actions">
+          <button id="onboarding-next" class="btn-primary" disabled>Next</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Model -->
+      <div class="onboarding-step" data-step="3">
+        <h2>Choose your Whisper model</h2>
+        <p class="onboarding-desc">Tiny is fastest, Large is most accurate. The model downloads on first use.</p>
+        <div class="setting-row" style="margin-top:16px;">
+          <label>Model Size</label>
+          <select id="onboarding-model"></select>
+        </div>
+        <div class="modal-actions onboarding-actions">
+          <button id="onboarding-finish" class="btn-primary">Start Using Murmur</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h2>Settings</h2>
+
+      <div class="settings-group">
+        <div class="settings-group-title">Whisper Model</div>
+        <div class="setting-row">
+          <label>Model Size</label>
+          <select id="setting-model"></select>
+          <span id="setting-model-hint" class="setting-hint">Larger models are slower but more accurate</span>
+        </div>
+        <div class="setting-row">
+          <label>Language</label>
+          <select id="setting-language"></select>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">Summarization</div>
+        <div class="setting-row">
+          <label>Summary Model</label>
+          <select id="setting-summary-model"></select>
+          <span class="setting-hint">Summarizes transcripts locally after transcription</span>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">Obsidian Vault</div>
+        <div class="setting-row">
+          <label>Vault Path</label>
+          <div class="setting-input-row">
+            <input type="text" id="setting-vault" readonly placeholder="Click Browse to select…">
+            <button id="btn-browse-vault" class="btn-ghost">Browse</button>
+          </div>
+        </div>
+        <div class="setting-row">
+          <label>Subfolder Name</label>
+          <input type="text" id="setting-subfolder" placeholder="Murmur">
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <div class="settings-group-title">Behavior</div>
+        <div class="setting-row">
+          <label>Silence Timeout (seconds)</label>
+          <input type="number" id="setting-silence" min="10" max="600" value="120">
+          <span class="setting-hint">Auto-stop recording after this many seconds of silence</span>
+        </div>
+        <div class="setting-row setting-row-toggle">
+          <label>Hide window from screen sharing</label>
+          <label class="toggle">
+            <input type="checkbox" id="setting-hide-screenshare" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-close-settings" class="btn-primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status bar -->
+  <div id="statusbar">
+    <span id="status-text">Ready</span>
+    <span id="status-privacy">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+      100% Local
+    </span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

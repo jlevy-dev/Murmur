@@ -1,16 +1,43 @@
-# Build artifacts
-Tome/.build/
-Tome/.swiftpm/
+# Dependencies
+node_modules/
+
+# Build output
 dist/
+python-dist/
 build/
 
-# macOS
+# Python
+python/__pycache__/
+python/*.pyc
+python/build/
+python/*.spec
+*.egg-info/
+
+# Models (downloaded at runtime)
+models/
+
+# Electron
+*.log
+
+# OS
 .DS_Store
-*.xcuserdata
+Thumbs.db
+Desktop.ini
 
 # IDE
+.vscode/
+.idea/
 *.swp
 *~
 
-# Misc
-*.spec
+# Environment
+.env
+.env.local
+
+# Old macOS source
+Tome/.build/
+Tome/.swiftpm/
+*.xcuserdata
+
+# Old source (no longer used)
+src/
