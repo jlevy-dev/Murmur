@@ -121,7 +121,7 @@ function concatenateParts(parts, tempDir, outputPath) {
   });
 }
 
-// Extract zip using PowerShell (async — won't block the UI)
+// Extract zip using tar (built into Windows 10+, much faster than PowerShell)
 function extractZip(zipPath, destDir) {
   if (fs.existsSync(destDir)) {
     fs.rmSync(destDir, { recursive: true, force: true });
@@ -129,10 +129,7 @@ function extractZip(zipPath, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
-    const child = spawn('powershell.exe', [
-      '-NoProfile', '-Command',
-      `Expand-Archive -Path '${zipPath}' -DestinationPath '${destDir}' -Force`
-    ], { stdio: 'pipe' });
+    const child = spawn('tar', ['-xf', zipPath, '-C', destDir], { stdio: 'pipe' });
 
     child.on('exit', (code) => {
       if (code === 0) resolve();
