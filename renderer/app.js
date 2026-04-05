@@ -16,6 +16,7 @@ let summaryModels = {};
 let detectedSourceApp = null;
 let liveInterval = null;
 let liveTranscriptParts = [];
+let liveTranscriptFullText = '';
 let isTranscribingLive = false;
 
 // Single-channel (memo)
@@ -294,6 +295,7 @@ async function startRecording() {
 
     // Reset live transcript
     liveTranscriptParts = [];
+    liveTranscriptFullText = '';
     const liveEl = document.getElementById('live-transcript');
     if (liveEl) liveEl.textContent = 'Listening...';
 
@@ -830,14 +832,40 @@ function closeSettings() {
 
 
 // ── Live transcription ──────────────────────────────────────────────────────
+
+// Deduplicate overlapping text between previous accumulated text and new chunk.
+// If the new text starts with words that match the end of the existing text,
+// trim the overlapping portion so we don't repeat ourselves.
+function deduplicateOverlap(existing, newText) {
+  if (!existing) return newText;
+  const existingWords = existing.trim().split(/\s+/);
+  const newWords = newText.trim().split(/\s+/);
+  if (newWords.length === 0) return existing;
+
+  // Try progressively smaller overlaps (max 10 words) to find where newText
+  // repeats the tail of existing text
+  const maxCheck = Math.min(10, existingWords.length, newWords.length);
+  for (let overlap = maxCheck; overlap >= 2; overlap--) {
+    const tail = existingWords.slice(-overlap).join(' ').toLowerCase();
+    const head = newWords.slice(0, overlap).join(' ').toLowerCase();
+    if (tail === head) {
+      // Found overlap — append only the non-overlapping part
+      return existing.trim() + ' ' + newWords.slice(overlap).join(' ');
+    }
+  }
+  // No overlap found — just append with a space
+  return existing.trim() + ' ' + newText.trim();
+}
+
 function startLiveTranscription() {
-  // Transcribe every 5 seconds using accumulated audio
+  // Transcribe every 3 seconds, sending only the last 10s of audio.
+  // New text is accumulated into liveTranscriptFullText with deduplication.
   liveInterval = setInterval(async () => {
     if (isTranscribingLive) return; // skip if previous chunk still processing
 
     // Get current chunks based on mode
     const chunks = mode === 'call' ? micChunks : audioChunks;
-    if (!chunks || chunks.length < 3) return;
+    if (!chunks || chunks.length < 2) return;
 
     isTranscribingLive = true;
     try {
@@ -845,17 +873,19 @@ function startLiveTranscription() {
       const pcm = await decodeToPcm([blob]);
       if (pcm.length < 16000) { isTranscribingLive = false; return; }
 
-      // Only send last 30 seconds to keep it fast
-      const maxSamples = 30 * 16000;
+      // Only send last 10 seconds for a quick, focused transcription
+      const maxSamples = 10 * 16000;
       const segment = pcm.length > maxSamples
         ? pcm.slice(pcm.length - maxSamples)
         : pcm;
 
       const result = await window.murmur.transcribeStream(segment, 16000);
-      if (result.text) {
+      if (result.text && result.text.trim()) {
+        // Accumulate with deduplication instead of replacing
+        liveTranscriptFullText = deduplicateOverlap(liveTranscriptFullText, result.text.trim());
         const liveEl = document.getElementById('live-transcript');
         if (liveEl) {
-          liveEl.textContent = result.text;
+          liveEl.textContent = liveTranscriptFullText;
           liveEl.scrollTop = liveEl.scrollHeight;
         }
       }
@@ -863,7 +893,7 @@ function startLiveTranscription() {
       console.warn('Live transcription error:', e);
     }
     isTranscribingLive = false;
-  }, 5000);
+  }, 3000);
 }
 
 function stopLiveTranscription() {
@@ -872,6 +902,7 @@ function stopLiveTranscription() {
     liveInterval = null;
   }
   isTranscribingLive = false;
+  liveTranscriptFullText = '';
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -999,6 +1030,47 @@ async function onBackendDownloadComplete() {
     statusText.textContent = 'ML backend starting...';
   }
 }
+
+// ── Auto-update notifications ───────────────────────────────────────────────
+(function setupUpdateBanner() {
+  const banner = document.getElementById('update-banner');
+  const bannerText = document.getElementById('update-banner-text');
+  const bannerBtn = document.getElementById('update-banner-btn');
+  const bannerDismiss = document.getElementById('update-banner-dismiss');
+  if (!banner) return;
+
+  let pendingVersion = null;
+
+  window.murmur.onUpdateAvailable((data) => {
+    pendingVersion = data.version;
+    bannerText.textContent = `Update v${data.version} available`;
+    bannerBtn.textContent = 'Download';
+    banner.classList.remove('hidden');
+  });
+
+  window.murmur.onUpdateDownloaded((data) => {
+    bannerText.textContent = `Update v${data.version} ready to install`;
+    bannerBtn.textContent = 'Restart & Install';
+    bannerBtn.onclick = () => window.murmur.installUpdate();
+    banner.classList.remove('hidden');
+  });
+
+  bannerBtn.addEventListener('click', async () => {
+    if (bannerBtn.textContent === 'Download') {
+      bannerBtn.textContent = 'Downloading...';
+      bannerBtn.disabled = true;
+      const result = await window.murmur.downloadUpdate();
+      if (!result.success) {
+        bannerBtn.textContent = 'Retry';
+        bannerBtn.disabled = false;
+      }
+    }
+  });
+
+  bannerDismiss.addEventListener('click', () => {
+    banner.classList.add('hidden');
+  });
+})();
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 init();

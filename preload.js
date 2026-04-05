@@ -51,6 +51,21 @@ contextBridge.exposeInMainWorld('murmur', {
     return () => ipcRenderer.removeListener('backend-missing', handler);
   },
 
+  // Auto-update
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  downloadUpdate: () => ipcRenderer.invoke('download-update'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  onUpdateAvailable: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on('update-available', handler);
+    return () => ipcRenderer.removeListener('update-available', handler);
+  },
+  onUpdateDownloaded: (cb) => {
+    const handler = (_e, data) => cb(data);
+    ipcRenderer.on('update-downloaded', handler);
+    return () => ipcRenderer.removeListener('update-downloaded', handler);
+  },
+
   // Events from main process
   onStatus: (cb) => {
     const handler = (_e, msg) => cb(msg);

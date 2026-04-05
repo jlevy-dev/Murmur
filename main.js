@@ -4,6 +4,7 @@ const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const WebSocket = require('ws');
 const { getBackendDir, getBackendExePath, isBackendInstalled, downloadBackend } = require('./backend-downloader');
+const { autoUpdater } = require('electron-updater');
 
 // Force Electron to use the discrete GPU instead of integrated
 app.commandLine.appendSwitch('force_high_performance_gpu');
@@ -152,6 +153,24 @@ function startPython() {
     console.log(`[Murmur] Python process exited with code ${code}`);
     pyProcess = null;
     wsReady = false;
+    if (ws) {
+      try { ws.close(); } catch (_) {}
+      ws = null;
+    }
+    // Notify renderer and auto-restart (unless app is quitting)
+    if (!app.isQuitting) {
+      send('status', 'ML backend crashed — restarting...');
+      console.log('[Murmur] Scheduling backend restart in 3s...');
+      setTimeout(() => {
+        if (!pyProcess && !app.isQuitting) {
+          console.log('[Murmur] Restarting Python backend...');
+          startPython();
+          setTimeout(() => {
+            if (!ws) connectWebSocket();
+          }, 1000);
+        }
+      }, 3000);
+    }
   });
 }
 
@@ -165,12 +184,12 @@ function connectWebSocket() {
     wsReady = true;
     send('status', 'ML backend connected — loading models...');
 
-    // Preload models in background so first transcription is instant
+    // Preload only the transcription model on startup (saves ~2-3 GB VRAM).
+    // The summary model loads on-demand when the user clicks Summarize.
     try {
       const store = await getStore();
       const modelSize = store.get('modelSize') || 'base';
-      const summaryModelKey = store.get('summaryModel') || 'qwen2.5-3b';
-      sendToPython('preload-models', { modelSize, summaryModelKey })
+      sendToPython('load-model', { task: 'transcription', modelSize })
         .then(() => send('status', 'Ready'))
         .catch(err => console.error('[Murmur] Preload failed:', err.message));
     } catch (err) {
@@ -225,6 +244,18 @@ function connectWebSocket() {
   });
 }
 
+const REQUEST_TIMEOUTS = {
+  'ping':             10_000,
+  'gpu-info':         10_000,
+  'load-model':      120_000,
+  'preload-models':  300_000,
+  'transcribe':      600_000,
+  'transcribe-call': 600_000,
+  'transcribe-stream': 30_000,
+  'summarize':       300_000,
+  'unload':           10_000,
+};
+
 async function sendToPython(type, payload = {}) {
   // Wait up to 30s for the backend to connect
   if (!wsReady || !ws) {
@@ -238,9 +269,24 @@ async function sendToPython(type, payload = {}) {
     }
   }
 
+  const timeoutMs = REQUEST_TIMEOUTS[type] || 60_000;
+
   return new Promise((resolve, reject) => {
     const requestId = String(++requestCounter);
-    pendingRequests.set(requestId, { resolve, reject });
+
+    const timer = setTimeout(() => {
+      if (pendingRequests.has(requestId)) {
+        pendingRequests.delete(requestId);
+        const err = new Error(`Request '${type}' timed out after ${timeoutMs / 1000}s`);
+        console.error(`[Murmur] ${err.message}`);
+        reject(err);
+      }
+    }, timeoutMs);
+
+    pendingRequests.set(requestId, {
+      resolve: (data) => { clearTimeout(timer); resolve(data); },
+      reject:  (err)  => { clearTimeout(timer); reject(err); },
+    });
 
     const msg = JSON.stringify({ type, requestId, ...payload });
     ws.send(msg);
@@ -379,6 +425,35 @@ app.whenReady().then(() => {
     event.preventDefault();
     mainWindow.hide();
   });
+
+  // ── Auto-update (silent check, no auto-download) ──────────────────────────
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', (info) => {
+    console.log(`[Murmur] Update available: v${info.version}`);
+    send('update-available', { version: info.version });
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log(`[Murmur] Update downloaded: v${info.version}`);
+    send('update-downloaded', { version: info.version });
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('[Murmur] Auto-updater error:', err.message);
+  });
+
+  // Check for updates silently after a short delay
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(err => {
+      console.error('[Murmur] Update check failed:', err.message);
+    });
+  }, 5000);
+});
+
+app.on('before-quit', () => {
+  app.isQuitting = true;
 });
 
 app.on('will-quit', () => {
@@ -387,6 +462,31 @@ app.on('will-quit', () => {
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+
+// ── IPC: Auto-update ──────────────────────────────────────────────────────
+ipcMain.handle('check-for-updates', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return { updateAvailable: !!result?.updateInfo };
+  } catch (err) {
+    console.error('[Murmur] Manual update check failed:', err.message);
+    return { updateAvailable: false, error: err.message };
+  }
+});
+
+ipcMain.handle('download-update', async () => {
+  try {
+    await autoUpdater.downloadUpdate();
+    return { success: true };
+  } catch (err) {
+    console.error('[Murmur] Update download failed:', err.message);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
+});
 
 // ── IPC: Backend download ──────────────────────────────────────────────────
 ipcMain.handle('start-backend-download', async () => {

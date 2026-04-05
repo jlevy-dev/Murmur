@@ -156,6 +156,21 @@ async function downloadBackend(window) {
   const tempDir = path.join(app.getPath('userData'), 'backend-download-temp');
   fs.mkdirSync(tempDir, { recursive: true });
 
+  // Check disk space before starting (~10 GB needed: 3 GB download + 5 GB extracted + buffer)
+  const REQUIRED_BYTES = 10 * 1024 * 1024 * 1024; // 10 GB
+  try {
+    const diskStats = fs.statfsSync(tempDir);
+    const freeBytes = diskStats.bfree * diskStats.bsize;
+    const freeGB = (freeBytes / (1024 * 1024 * 1024)).toFixed(1);
+    if (freeBytes < REQUIRED_BYTES) {
+      throw new Error(`Not enough disk space. Need ~10 GB free, only ${freeGB} GB available.`);
+    }
+    console.log(`[Downloader] Disk space check passed: ${freeGB} GB free`);
+  } catch (err) {
+    if (err.message.includes('Not enough disk space')) throw err;
+    console.warn('[Downloader] Could not check disk space, proceeding anyway:', err.message);
+  }
+
   try {
     // 1. Fetch manifest from latest release
     send({ stage: 'fetching-manifest', percent: 0 });

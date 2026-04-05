@@ -15,6 +15,13 @@
 
   <!-- Main layout -->
   <div id="app">
+    <!-- Update notification banner -->
+    <div id="update-banner" class="update-banner hidden">
+      <span id="update-banner-text">Update available</span>
+      <button id="update-banner-btn" class="update-banner-btn">Download</button>
+      <button id="update-banner-dismiss" class="update-banner-dismiss">&times;</button>
+    </div>
+
     <!-- Sidebar -->
     <aside id="sidebar">
       <div class="sidebar-section">
@@ -100,6 +107,7 @@
           <h2>Ready to capture</h2>
           <p>Select a mode and press Start Recording.<br>
           All processing happens locally on your device — nothing leaves this machine.</p>
+          <p class="drop-hint">or drop an audio file here</p>
         </div>
       </div>
 
@@ -154,6 +162,8 @@
             Save to Vault
           </button>
           <button id="btn-copy" class="btn-ghost">Copy Text</button>
+          <button id="btn-export-srt" class="btn-ghost">Export SRT</button>
+          <button id="btn-export-json" class="btn-ghost">Export JSON</button>
           <button id="btn-new" class="btn-ghost">New Recording</button>
         </div>
         <div id="transcript-content" class="transcript-body"></div>

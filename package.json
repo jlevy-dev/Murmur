@@ -1,6 +1,6 @@
 {
   "name": "murmur",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Privacy-focused meeting capture & transcription for Windows — local Whisper, Obsidian output",
   "main": "main.js",
   "scripts": {
@@ -14,8 +14,19 @@
     "appId": "io.gremble.murmur",
     "productName": "Murmur",
     "win": {
-      "target": "dir",
-      "icon": "assets/icon.ico"
+      "target": "nsis",
+      "icon": "assets/icon.png"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "jlevy-dev",
+      "repo": "Murmur"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "deleteAppDataOnUninstall": false
     },
     "files": [
       "main.js",
@@ -28,6 +39,7 @@
   },
   "dependencies": {
     "electron-store": "^10.0.0",
+    "electron-updater": "^6.3.9",
     "ws": "^8.20.0"
   },
   "devDependencies": {
