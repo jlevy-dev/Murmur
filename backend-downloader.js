@@ -121,7 +121,7 @@ function concatenateParts(parts, tempDir, outputPath) {
   });
 }
 
-// Extract zip using tar (built into Windows 10+, much faster than PowerShell)
+// Extract zip using .NET ZipFile (streaming, doesn't load entire zip into memory)
 function extractZip(zipPath, destDir) {
   if (fs.existsSync(destDir)) {
     fs.rmSync(destDir, { recursive: true, force: true });
@@ -129,11 +129,18 @@ function extractZip(zipPath, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
-    const child = spawn('tar', ['-xf', zipPath, '-C', destDir], { stdio: 'pipe' });
+    const child = spawn('powershell.exe', [
+      '-NoProfile', '-Command',
+      `Add-Type -Assembly System.IO.Compression.FileSystem; ` +
+      `[System.IO.Compression.ZipFile]::ExtractToDirectory('${zipPath}', '${destDir}')`
+    ], { stdio: 'pipe' });
+
+    let stderr = '';
+    child.stderr.on('data', (data) => { stderr += data.toString(); });
 
     child.on('exit', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`Extraction failed with code ${code}`));
+      else reject(new Error(`Extraction failed (code ${code}): ${stderr}`));
     });
     child.on('error', reject);
   });
@@ -209,34 +216,32 @@ async function downloadBackend(window) {
     // 4. Skip full zip checksum — individual parts already verified
     // Hashing 3GB synchronously would block the UI
 
-    // 5. Extract
+    // 5. Extract to a temp extraction dir first
     send({ stage: 'extracting', percent: 100, detail: 'Extracting ML engine (this may take a few minutes)...' });
-    const backendDir = getBackendDir();
-    extractZip(zipPath, backendDir);
+    const extractDir = path.join(app.getPath('userData'), 'backend-extract-temp');
+    await extractZip(zipPath, extractDir);
 
-    // 6. Verify exe exists after extraction
-    if (!fs.existsSync(getBackendExePath())) {
-      // Maybe extracted into a subfolder — check one level deep
-      const subfolders = fs.readdirSync(backendDir).filter(f =>
-        fs.statSync(path.join(backendDir, f)).isDirectory()
-      );
-      for (const sub of subfolders) {
-        const subExe = path.join(backendDir, sub, 'murmur-backend.exe');
-        if (fs.existsSync(subExe)) {
-          // Move contents up one level
-          const subDir = path.join(backendDir, sub);
-          const entries = fs.readdirSync(subDir);
-          for (const entry of entries) {
-            fs.renameSync(path.join(subDir, entry), path.join(backendDir, entry));
-          }
-          fs.rmdirSync(subDir);
-          break;
-        }
-      }
+    // 6. Move files to final location
+    // The zip contains a "murmur-backend/" subfolder, so the exe is at extractDir/murmur-backend/murmur-backend.exe
+    const backendDir = getBackendDir();
+    const subfolderExe = path.join(extractDir, 'murmur-backend', 'murmur-backend.exe');
+    const directExe = path.join(extractDir, 'murmur-backend.exe');
+
+    if (fs.existsSync(subfolderExe)) {
+      // Zip had a subfolder — move that subfolder to become the backend dir
+      if (fs.existsSync(backendDir)) fs.rmSync(backendDir, { recursive: true, force: true });
+      fs.renameSync(path.join(extractDir, 'murmur-backend'), backendDir);
+      fs.rmSync(extractDir, { recursive: true, force: true });
+    } else if (fs.existsSync(directExe)) {
+      // Zip had files at root — just rename the extract dir
+      if (fs.existsSync(backendDir)) fs.rmSync(backendDir, { recursive: true, force: true });
+      fs.renameSync(extractDir, backendDir);
+    } else {
+      throw new Error('Extraction failed — murmur-backend.exe not found in archive');
     }
 
     if (!fs.existsSync(getBackendExePath())) {
-      throw new Error('Extraction failed — murmur-backend.exe not found');
+      throw new Error('Extraction failed — murmur-backend.exe not found after move');
     }
 
     // 7. Cleanup temp files
