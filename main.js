@@ -23,11 +23,8 @@ let reconnectTimer = null;
 const PY_PORT = 9735;
 
 const MODELS = {
-  'tiny':      { id: 'tiny',      label: 'Tiny',     size: '~75 MB',  params: '39M'  },
-  'base':      { id: 'base',      label: 'Base',     size: '~140 MB', params: '74M'  },
-  'small':     { id: 'small',     label: 'Small',    size: '~460 MB', params: '244M' },
-  'medium':    { id: 'medium',    label: 'Medium',   size: '~1.5 GB', params: '769M' },
-  'large-v3':  { id: 'large-v3',  label: 'Large v3', size: '~3 GB',   params: '1.5B' },
+  'parakeet-tdt-0.6b': { id: 'parakeet-tdt-0.6b', label: 'Parakeet TDT 0.6B', size: '~700 MB', params: '600M' },
+  'parakeet-tdt-1.1b': { id: 'parakeet-tdt-1.1b', label: 'Parakeet TDT 1.1B', size: '~1.3 GB', params: '1.1B' },
 };
 
 const SUMMARY_MODELS = {
@@ -82,7 +79,7 @@ async function getStore() {
         vaultPath: '',
         vaultSubfolder: 'Murmur',
         language: 'auto',
-        modelSize: 'base',
+        modelSize: 'parakeet-tdt-0.6b',
         summaryModel: 'qwen2.5-3b',
         silenceTimeout: 120,
         hideFromScreenShare: true
@@ -188,7 +185,7 @@ function connectWebSocket() {
     // The summary model loads on-demand when the user clicks Summarize.
     try {
       const store = await getStore();
-      const modelSize = store.get('modelSize') || 'base';
+      const modelSize = store.get('modelSize') || 'parakeet-tdt-0.6b';
       sendToPython('load-model', { task: 'transcription', modelSize })
         .then(() => send('status', 'Ready'))
         .catch(err => console.error('[Murmur] Preload failed:', err.message));
@@ -572,7 +569,7 @@ ipcMain.handle('settings:pickFolder', async () => {
 ipcMain.handle('transcribe', async (_e, audioFloat32, sampleRate) => {
   try {
     const store = await getStore();
-    const modelSize = store.get('modelSize') || 'base';
+    const modelSize = store.get('modelSize') || 'parakeet-tdt-0.6b';
     const lang = store.get('language') || 'auto';
 
     send('status', 'Sending audio to ML backend...');
@@ -599,7 +596,7 @@ ipcMain.handle('transcribe', async (_e, audioFloat32, sampleRate) => {
 ipcMain.handle('transcribe-stream', async (_e, audioFloat32, sampleRate) => {
   try {
     const store = await getStore();
-    const modelSize = store.get('modelSize') || 'base';
+    const modelSize = store.get('modelSize') || 'parakeet-tdt-0.6b';
     const audioBase64 = float32ToBase64(audioFloat32);
 
     const result = await sendToPython('transcribe-stream', {
@@ -618,7 +615,7 @@ ipcMain.handle('transcribe-stream', async (_e, audioFloat32, sampleRate) => {
 ipcMain.handle('transcribe-call', async (_e, micFloat32, sysFloat32, sampleRate) => {
   try {
     const store = await getStore();
-    const modelSize = store.get('modelSize') || 'base';
+    const modelSize = store.get('modelSize') || 'parakeet-tdt-0.6b';
     const lang = store.get('language') || 'auto';
 
     send('status', 'Sending audio to ML backend...');

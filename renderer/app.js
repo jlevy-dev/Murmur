@@ -819,7 +819,7 @@ async function openSettings() {
   $('#setting-vault').value = settings.vaultPath || '';
   $('#setting-subfolder').value = settings.vaultSubfolder || 'Murmur';
   $('#setting-silence').value = settings.silenceTimeout || 120;
-  $('#setting-model').value = settings.modelSize || 'base';
+  $('#setting-model').value = settings.modelSize || 'parakeet-tdt-0.6b';
   $('#setting-language').value = settings.language || 'auto';
   $('#setting-hide-screenshare').checked = settings.hideFromScreenShare !== false;
   $('#setting-summary-model').value = settings.summaryModel || 'qwen2.5-3b';
@@ -948,7 +948,7 @@ function showOnboarding(modelList, currentSettings) {
     const opt = document.createElement('option');
     opt.value = key;
     opt.textContent = `${m.label} — ${m.size} (${m.params} params)`;
-    if (key === (currentSettings.modelSize || 'tiny')) opt.selected = true;
+    if (key === (currentSettings.modelSize || 'parakeet-tdt-0.6b')) opt.selected = true;
     onboardModelSelect.appendChild(opt);
   }
 

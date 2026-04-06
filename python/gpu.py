@@ -33,43 +33,22 @@ def recommend_models(vram_mb):
     """
     if vram_mb < 4096:
         return {
-            "transcription_model": "tiny",
+            "transcription_model": "parakeet-tdt-0.6b",
             "summary_model": None,
             "tier": "low",
             "tier_label": f"<4 GB VRAM ({vram_mb} MB available)",
         }
-    elif vram_mb < 6144:
-        return {
-            "transcription_model": "base",
-            "summary_model": "qwen2.5-1.5b",
-            "tier": "medium-low",
-            "tier_label": f"4-6 GB VRAM ({vram_mb} MB available)",
-        }
     elif vram_mb < 8192:
         return {
-            "transcription_model": "small",
+            "transcription_model": "parakeet-tdt-0.6b",
             "summary_model": "qwen2.5-1.5b",
             "tier": "medium",
-            "tier_label": f"6-8 GB VRAM ({vram_mb} MB available)",
-        }
-    elif vram_mb < 12288:
-        return {
-            "transcription_model": "medium",
-            "summary_model": "qwen2.5-3b",
-            "tier": "high",
-            "tier_label": f"8-12 GB VRAM ({vram_mb} MB available)",
+            "tier_label": f"4-8 GB VRAM ({vram_mb} MB available)",
         }
     else:
         return {
-            "transcription_model": "large-v3",
+            "transcription_model": "parakeet-tdt-1.1b",
             "summary_model": "qwen2.5-3b",
-            "tier": "ultra",
-            "tier_label": f"12+ GB VRAM ({vram_mb} MB available)",
+            "tier": "high",
+            "tier_label": f"8+ GB VRAM ({vram_mb} MB available)",
         }
-
-
-def compute_type_for_device(device):
-    """Pick optimal compute type for faster-whisper."""
-    if device == "cuda":
-        return "float16"
-    return "int8"

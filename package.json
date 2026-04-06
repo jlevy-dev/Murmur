@@ -1,7 +1,7 @@
 {
   "name": "murmur",
   "version": "0.1.1",
-  "description": "Privacy-focused meeting capture & transcription for Windows — local Whisper, Obsidian output",
+  "description": "Privacy-focused meeting capture & transcription for Windows — local Parakeet TDT, Obsidian output",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
