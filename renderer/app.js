@@ -293,7 +293,9 @@ async function startRecording() {
     showView('recording');
     statusText.textContent = 'Recording…';
 
-    // Reset live transcript
+    // Live transcript — only shown in memo mode
+    const liveContainer = document.getElementById('live-transcript-container');
+    if (liveContainer) liveContainer.style.display = mode === 'memo' ? '' : 'none';
     liveTranscriptParts = [];
     liveTranscriptFullText = '';
     const liveEl = document.getElementById('live-transcript');
