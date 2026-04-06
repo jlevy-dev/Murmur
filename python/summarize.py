@@ -57,11 +57,10 @@ def load(model_key="qwen2.5-3b", on_progress=None):
         on_progress(f"Loading {model_info['label']} ({model_info['size']})...")
 
     model_id = model_info["id"]
-    _tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    _tokenizer = AutoTokenizer.from_pretrained(model_id)
 
     load_kwargs = {
-        "trust_remote_code": True,
-        "dtype": torch.float16 if device == "cuda" else torch.float32,
+        "torch_dtype": torch.float16 if device == "cuda" else torch.float32,
     }
     if device == "cuda":
         load_kwargs["device_map"] = "auto"

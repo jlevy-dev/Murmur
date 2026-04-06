@@ -129,10 +129,13 @@ function extractZip(zipPath, destDir) {
   fs.mkdirSync(destDir, { recursive: true });
 
   return new Promise((resolve, reject) => {
+    // Escape single quotes in paths to prevent PowerShell injection
+    const safeZip = zipPath.replace(/'/g, "''");
+    const safeDest = destDir.replace(/'/g, "''");
     const child = spawn('powershell.exe', [
       '-NoProfile', '-Command',
       `Add-Type -Assembly System.IO.Compression.FileSystem; ` +
-      `[System.IO.Compression.ZipFile]::ExtractToDirectory('${zipPath}', '${destDir}')`
+      `[System.IO.Compression.ZipFile]::ExtractToDirectory('${safeZip}', '${safeDest}')`
     ], { stdio: 'pipe' });
 
     let stderr = '';

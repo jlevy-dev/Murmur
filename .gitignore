@@ -9,6 +9,7 @@ build/
 # Python
 python/__pycache__/
 python/*.pyc
+python/.venv/
 python/build/
 python/*.spec
 *.egg-info/

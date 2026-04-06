@@ -27,7 +27,7 @@ def load(on_progress=None):
 
 
 def diarize(pcm, sample_rate, chunks, on_progress=None):
-    """Assign speaker labels to Whisper chunks.
+    """Assign speaker labels to transcription chunks.
 
     Args:
         pcm: System audio as numpy float32 array

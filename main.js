@@ -540,12 +540,21 @@ ipcMain.handle('detect-source-app', () => {
 });
 
 // ── IPC: Settings ───────────────────────────────────────────────────────────
+const ALLOWED_SETTINGS = new Set([
+  'vaultPath', 'vaultSubfolder', 'language', 'modelSize',
+  'summaryModel', 'silenceTimeout', 'hideFromScreenShare', 'compute',
+]);
+
 ipcMain.handle('settings:get', async () => {
   const store = await getStore();
   return store.store;
 });
 
 ipcMain.handle('settings:set', async (_e, key, value) => {
+  if (!ALLOWED_SETTINGS.has(key)) {
+    console.warn(`[Murmur] Rejected unknown setting key: ${key}`);
+    return;
+  }
   const store = await getStore();
   store.set(key, value);
 
@@ -678,29 +687,40 @@ ipcMain.handle('save-transcript', async (_e, data) => {
     return { success: false, error: 'No vault path configured — open Settings first' };
   }
 
-  const outDir = path.join(vaultPath, subfolder);
+  // Sanitize subfolder and mode to prevent path traversal
+  const safeSubfolder = subfolder.replace(/[\\/:*?"<>|.]/g, '_');
+  const safeMode = (mode === 'call' || mode === 'memo') ? mode : 'memo';
+
+  const outDir = path.join(vaultPath, safeSubfolder);
   if (!fs.existsSync(outDir)) {
     fs.mkdirSync(outDir, { recursive: true });
+  }
+
+  // Verify outDir is actually inside vaultPath
+  const resolvedOut = path.resolve(outDir);
+  const resolvedVault = path.resolve(vaultPath);
+  if (!resolvedOut.startsWith(resolvedVault)) {
+    return { success: false, error: 'Invalid subfolder path' };
   }
 
   const now = new Date();
   const dateStr = now.toISOString().split('T')[0];
   const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '');
-  const filename = `${dateStr}_${timeStr}_${mode}.md`;
+  const filename = `${dateStr}_${timeStr}_${safeMode}.md`;
 
   const durationMin = Math.floor(duration / 60);
   const durationSec = Math.round(duration % 60);
   const durationStr = `${durationMin}m ${durationSec}s`;
 
-  const type = mode === 'call' ? 'meeting' : 'fleeting';
-  const tags = mode === 'call'
+  const type = safeMode === 'call' ? 'meeting' : 'fleeting';
+  const tags = safeMode === 'call'
     ? ['log/meeting', 'status/inbox', 'source/murmur']
     : ['log/memo', 'status/inbox', 'source/murmur'];
 
   const hasSpeakers = chunks && chunks.some(c => c.speaker);
   const attendees = hasSpeakers
     ? [...new Set(chunks.map(c => c.speaker).filter(Boolean))]
-    : [mode === 'call' ? 'You, Remote' : 'You'];
+    : [safeMode === 'call' ? 'You, Remote' : 'You'];
 
   let body = '';
   if (chunks && chunks.length > 0) {
@@ -755,7 +775,12 @@ ${summaryBlock}${body}`;
 });
 
 ipcMain.handle('open-file', async (_e, filePath) => {
-  shell.showItemInFolder(filePath);
+  // Only allow opening files inside the configured vault path
+  const store = await getStore();
+  const vaultPath = store.get('vaultPath');
+  if (vaultPath && path.resolve(filePath).startsWith(path.resolve(vaultPath))) {
+    shell.showItemInFolder(filePath);
+  }
 });
 
 ipcMain.handle('notify', async (_e, title, body) => {

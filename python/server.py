@@ -2,7 +2,6 @@
 import asyncio
 import gc
 import json
-import sys
 import traceback
 
 import websockets
@@ -38,6 +37,19 @@ def _format_error(e, operation):
 
 PORT = 9735
 clients = set()
+
+
+def _process_request(connection, request):
+    """Reject WebSocket connections from unauthorized browser origins."""
+    origin = request.headers.get("Origin")
+    if origin is None:
+        return None  # Non-browser clients (Node.js ws) don't send Origin — allow
+    if origin.startswith("file://") or origin.startswith("http://localhost") or origin.startswith("http://127.0.0.1"):
+        return None  # Electron renderer or local tools — allow
+    # Reject connections from other origins (e.g. malicious webpages)
+    from websockets.http11 import Response
+    from websockets.datastructures import Headers
+    return Response(403, "Forbidden", Headers())
 
 
 async def handle_message(ws, raw):
@@ -319,22 +331,23 @@ async def main():
 
     print(f"[Murmur] WebSocket server starting on ws://localhost:{PORT}")
     try:
-        async with websockets.serve(handler, "localhost", PORT, max_size=500 * 1024 * 1024, ping_timeout=None, ping_interval=None):
+        async with websockets.serve(handler, "localhost", PORT, max_size=500 * 1024 * 1024, ping_timeout=60, ping_interval=30, process_request=_process_request):
             print(f"[Murmur] Ready")
             await asyncio.Future()  # run forever
     except OSError as e:
         if e.errno == 10048 or "address already in use" in str(e).lower():
-            # Kill whatever is using the port and retry
-            print(f"[Murmur] Port {PORT} in use, killing existing process...")
+            # Kill only other murmur-backend processes using the port
+            print(f"[Murmur] Port {PORT} in use, checking for stale murmur-backend...")
             import subprocess
             subprocess.run(
                 ["powershell", "-Command",
                  f"Get-NetTCPConnection -LocalPort {PORT} -ErrorAction SilentlyContinue | "
-                 f"ForEach-Object {{ Stop-Process -Id $_.OwningProcess -Force }}"],
+                 f"ForEach-Object {{ $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; "
+                 f"if ($p -and $p.Name -eq 'murmur-backend') {{ Stop-Process -Id $_.OwningProcess -Force }} }}"],
                 capture_output=True
             )
             await asyncio.sleep(1)
-            async with websockets.serve(handler, "localhost", PORT, max_size=500 * 1024 * 1024, ping_timeout=None, ping_interval=None):
+            async with websockets.serve(handler, "localhost", PORT, max_size=500 * 1024 * 1024, ping_timeout=60, ping_interval=30, process_request=_process_request):
                 print(f"[Murmur] Ready (after port recovery)")
                 await asyncio.Future()
         else:
