@@ -119,7 +119,10 @@ function startPython() {
     cwd = path.join(__dirname, 'python-dist', 'murmur-backend');
     console.log(`[Murmur] Starting bundled Python backend: ${cmd}`);
   } else {
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    // Prefer the project venv (Python 3.12 + NeMo), fall back to system python
+    const venvPython = path.join(pyDir, '.venv', 'Scripts', 'python.exe');
+    const pythonCmd = fs.existsSync(venvPython) ? venvPython
+      : (process.platform === 'win32' ? 'python' : 'python3');
     cmd = pythonCmd;
     args = [path.join(pyDir, 'server.py')];
     cwd = pyDir;
@@ -248,7 +251,7 @@ const REQUEST_TIMEOUTS = {
   'preload-models':  300_000,
   'transcribe':      600_000,
   'transcribe-call': 600_000,
-  'transcribe-stream': 30_000,
+  'transcribe-stream': 120_000,
   'summarize':       300_000,
   'unload':           10_000,
 };

@@ -81,7 +81,7 @@ async def handle_message(ws, raw):
             try:
                 task = msg.get("task")
                 if task == "transcription":
-                    model_size = msg.get("modelSize", "base")
+                    model_size = msg.get("modelSize", "parakeet-tdt-0.6b")
                     await loop.run_in_executor(
                         None, transcribe.load, model_size, sync_progress
                     )
@@ -98,7 +98,7 @@ async def handle_message(ws, raw):
 
         elif msg_type == "transcribe":
             try:
-                model_size = msg.get("modelSize", "base")
+                model_size = msg.get("modelSize", "parakeet-tdt-0.6b")
                 language = msg.get("language")
                 sample_rate = msg.get("sampleRate", 16000)
 
@@ -131,7 +131,7 @@ async def handle_message(ws, raw):
 
         elif msg_type == "transcribe-call":
             try:
-                model_size = msg.get("modelSize", "base")
+                model_size = msg.get("modelSize", "parakeet-tdt-0.6b")
                 language = msg.get("language")
                 sample_rate = msg.get("sampleRate", 16000)
 
@@ -207,7 +207,7 @@ async def handle_message(ws, raw):
         elif msg_type == "transcribe-stream":
             try:
                 # Lightweight streaming transcription for live preview
-                model_size = msg.get("modelSize", "base")
+                model_size = msg.get("modelSize", "parakeet-tdt-0.6b")
                 sample_rate = msg.get("sampleRate", 16000)
 
                 pcm = audio_utils.decode_base64_pcm(msg["audioBase64"])
@@ -230,7 +230,7 @@ async def handle_message(ws, raw):
 
         elif msg_type == "preload-models":
             try:
-                model_size = msg.get("modelSize", "base")
+                model_size = msg.get("modelSize", "parakeet-tdt-0.6b")
                 model_key = msg.get("summaryModelKey", "qwen2.5-3b")
 
                 # Check VRAM and warn if requested models may exceed capacity
@@ -240,10 +240,10 @@ async def handle_message(ws, raw):
                     vram_free = info.get("vram_free_mb", 0)
                     recs = recommend_models(vram_free)
                     # Rough VRAM cost ordering for transcription models
-                    transcription_rank = {"tiny": 0, "base": 1, "small": 2, "medium": 3, "large-v3": 4}
+                    transcription_rank = {"parakeet-tdt-0.6b": 0, "parakeet-tdt-1.1b": 1}
                     summary_rank = {None: 0, "qwen2.5-1.5b": 1, "qwen2.5-3b": 2}
-                    req_t = transcription_rank.get(model_size, 2)
-                    rec_t = transcription_rank.get(recs["transcription_model"], 2)
+                    req_t = transcription_rank.get(model_size, 0)
+                    rec_t = transcription_rank.get(recs["transcription_model"], 0)
                     req_s = summary_rank.get(model_key, 1)
                     rec_s = summary_rank.get(recs["summary_model"], 1)
                     if req_t > rec_t or req_s > rec_s:
