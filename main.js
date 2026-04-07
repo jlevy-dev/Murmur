@@ -299,6 +299,94 @@ function float32ToBase64(float32Array) {
   return Buffer.from(bytes).toString('base64');
 }
 
+// ── Audio chunking for long recordings ──────────────────────────────────────
+const CHUNK_DURATION = 5 * 60; // 5 minutes per chunk
+const CHUNK_OVERLAP  = 2;      // 2 seconds overlap for continuity
+
+function splitAudioChunks(float32Array, sampleRate) {
+  const chunkSamples = CHUNK_DURATION * sampleRate;
+  const overlapSamples = CHUNK_OVERLAP * sampleRate;
+  const totalSamples = float32Array.length;
+
+  if (totalSamples <= chunkSamples) {
+    return [{ audio: float32Array, offsetSec: 0 }];
+  }
+
+  const chunks = [];
+  let start = 0;
+  while (start < totalSamples) {
+    const end = Math.min(start + chunkSamples, totalSamples);
+    chunks.push({
+      audio: float32Array.slice(start, end),
+      offsetSec: start / sampleRate,
+    });
+    if (end >= totalSamples) break;
+    start = end - overlapSamples; // overlap for smooth merging
+  }
+  return chunks;
+}
+
+function mergeChunkResults(results) {
+  // Merge transcription results from multiple chunks, adjusting timestamps
+  const allChunks = [];
+  let fullText = '';
+
+  for (const { result, offsetSec } of results) {
+    if (!result) continue;
+    if (result.text) {
+      fullText += (fullText ? ' ' : '') + result.text.trim();
+    }
+    if (result.chunks) {
+      for (const chunk of result.chunks) {
+        const adjusted = { ...chunk };
+        if (adjusted.timestamp) {
+          adjusted.timestamp = adjusted.timestamp.map(t => t + offsetSec);
+        }
+        allChunks.push(adjusted);
+      }
+    }
+  }
+
+  // Deduplicate overlapping chunks by timestamp (remove near-duplicate entries)
+  const deduped = [];
+  for (const chunk of allChunks) {
+    const ts = chunk.timestamp?.[0] ?? -1;
+    const lastTs = deduped.length > 0 ? (deduped[deduped.length - 1].timestamp?.[0] ?? -2) : -2;
+    // Skip if timestamp is within 1.5s of the last chunk and text is similar
+    if (ts >= 0 && lastTs >= 0 && Math.abs(ts - lastTs) < 1.5) continue;
+    deduped.push(chunk);
+  }
+
+  return {
+    text: fullText,
+    chunks: deduped,
+    detectedLanguage: results[0]?.result?.detectedLanguage || 'unknown',
+  };
+}
+
+async function transcribeChunked(audioFloat32, sampleRate, modelSize, language) {
+  const chunks = splitAudioChunks(audioFloat32, sampleRate);
+  const total = chunks.length;
+
+  if (total === 1) {
+    // Short recording — send as-is
+    const audioBase64 = float32ToBase64(chunks[0].audio);
+    return await sendToPython('transcribe', { audioBase64, sampleRate, modelSize, language });
+  }
+
+  console.log(`[Murmur] Splitting ${(audioFloat32.length / sampleRate / 60).toFixed(1)}min audio into ${total} chunks`);
+  const results = [];
+
+  for (let i = 0; i < total; i++) {
+    send('status', `Transcribing chunk ${i + 1}/${total}…`);
+    const audioBase64 = float32ToBase64(chunks[i].audio);
+    const result = await sendToPython('transcribe', { audioBase64, sampleRate, modelSize, language });
+    results.push({ result, offsetSec: chunks[i].offsetSec });
+  }
+
+  return mergeChunkResults(results);
+}
+
 function killPython() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
@@ -574,17 +662,10 @@ ipcMain.handle('transcribe', async (_e, audioFloat32, sampleRate) => {
     const store = await getStore();
     const modelSize = store.get('modelSize') || 'parakeet-tdt-0.6b';
     const lang = store.get('language') || 'auto';
+    const language = lang === 'auto' ? null : lang;
 
-    send('status', 'Sending audio to ML backend...');
-
-    const audioBase64 = float32ToBase64(audioFloat32);
-
-    const result = await sendToPython('transcribe', {
-      audioBase64,
-      sampleRate,
-      modelSize,
-      language: lang === 'auto' ? null : lang,
-    });
+    send('status', 'Transcribing…');
+    const result = await transcribeChunked(audioFloat32, sampleRate, modelSize, language);
 
     send('status', 'Done');
     return result;
@@ -620,24 +701,67 @@ ipcMain.handle('transcribe-call', async (_e, micFloat32, sysFloat32, sampleRate)
     const store = await getStore();
     const modelSize = store.get('modelSize') || 'parakeet-tdt-0.6b';
     const lang = store.get('language') || 'auto';
+    const language = lang === 'auto' ? null : lang;
 
-    send('status', 'Sending audio to ML backend...');
-    console.log(`[Call IPC] wsReady=${wsReady}, micFloat32=${micFloat32.length}, sysFloat32=${sysFloat32.length}`);
+    send('status', 'Transcribing call…');
+    console.log(`[Call IPC] micFloat32=${micFloat32.length}, sysFloat32=${sysFloat32.length}`);
 
-    const micBase64 = float32ToBase64(micFloat32);
-    const sysBase64 = float32ToBase64(sysFloat32);
-    console.log(`[Call IPC] micBase64=${micBase64.length} chars, sysBase64=${sysBase64.length} chars, sending...`);
+    // Chunk both channels in sync so timestamps align
+    const micChunks = splitAudioChunks(micFloat32, sampleRate);
+    const sysChunks = splitAudioChunks(sysFloat32, sampleRate);
+    const total = Math.max(micChunks.length, sysChunks.length);
 
-    const result = await sendToPython('transcribe-call', {
-      micBase64,
-      sysBase64,
-      sampleRate,
-      modelSize,
-      language: lang === 'auto' ? null : lang,
-    });
+    console.log(`[Call IPC] Split into ${total} chunk(s)`);
+
+    if (total === 1) {
+      // Short call — send as single message
+      const result = await sendToPython('transcribe-call', {
+        micBase64: float32ToBase64(micFloat32),
+        sysBase64: float32ToBase64(sysFloat32),
+        sampleRate,
+        modelSize,
+        language,
+      });
+      send('status', 'Done');
+      return result;
+    }
+
+    // Long call — transcribe each channel in chunks, then merge
+    const micResults = [];
+    for (let i = 0; i < micChunks.length; i++) {
+      send('status', `Transcribing mic ${i + 1}/${micChunks.length}…`);
+      const audioBase64 = float32ToBase64(micChunks[i].audio);
+      const result = await sendToPython('transcribe', { audioBase64, sampleRate, modelSize, language });
+      // Tag all chunks as "You"
+      if (result.chunks) result.chunks = result.chunks.map(c => ({ ...c, speaker: 'You' }));
+      micResults.push({ result, offsetSec: micChunks[i].offsetSec });
+    }
+
+    const sysResults = [];
+    for (let i = 0; i < sysChunks.length; i++) {
+      send('status', `Transcribing system audio ${i + 1}/${sysChunks.length}…`);
+      const audioBase64 = float32ToBase64(sysChunks[i].audio);
+      const result = await sendToPython('transcribe', { audioBase64, sampleRate, modelSize, language });
+      // Tag system chunks as "Other"
+      if (result.chunks) result.chunks = result.chunks.map(c => ({ ...c, speaker: 'Other' }));
+      sysResults.push({ result, offsetSec: sysChunks[i].offsetSec });
+    }
+
+    // Merge both channels
+    const micMerged = mergeChunkResults(micResults);
+    const sysMerged = mergeChunkResults(sysResults);
+
+    const allChunks = [...micMerged.chunks, ...sysMerged.chunks];
+    allChunks.sort((a, b) => (a.timestamp?.[0] ?? 0) - (b.timestamp?.[0] ?? 0));
+
+    const fullText = allChunks.map(c => c.text.trim()).join(' ');
 
     send('status', 'Done');
-    return result;
+    return {
+      text: fullText,
+      chunks: allChunks,
+      detectedLanguage: micMerged.detectedLanguage,
+    };
   } catch (err) {
     console.error('Call transcription error:', err);
     send('status', `Error: ${err.message}`);
