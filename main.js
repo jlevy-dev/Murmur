@@ -165,9 +165,6 @@ function startPython() {
         if (!pyProcess && !app.isQuitting) {
           console.log('[Murmur] Restarting Python backend...');
           startPython();
-          setTimeout(() => {
-            if (!ws) connectWebSocket();
-          }, 1000);
         }
       }, 3000);
     }
@@ -372,10 +369,7 @@ app.whenReady().then(() => {
     });
   } else {
     startPython();
-    // If Python server was already running, try connecting immediately
-    setTimeout(() => {
-      if (!ws) connectWebSocket();
-    }, 1000);
+    // WebSocket connects automatically when Python prints "Ready"
   }
 
   globalShortcut.register('Ctrl+Shift+R', () => {
@@ -503,9 +497,6 @@ ipcMain.handle('check-backend-installed', () => isBackendInstalled());
 ipcMain.handle('launch-backend-after-download', () => {
   if (isBackendInstalled()) {
     startPython();
-    setTimeout(() => {
-      if (!ws) connectWebSocket();
-    }, 1000);
     return true;
   }
   return false;

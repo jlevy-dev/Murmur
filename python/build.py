@@ -32,7 +32,7 @@ exclude_modules = [
     'setuptools',
     'pip',
     'wheel',
-    'distutils',
+    # 'distutils',  # conflicts with PyInstaller's own hook
     'unittest',
     'pydoc',
     'doctest',

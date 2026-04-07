@@ -336,14 +336,18 @@ async def main():
             await asyncio.Future()  # run forever
     except OSError as e:
         if e.errno == 10048 or "address already in use" in str(e).lower():
-            # Kill only other murmur-backend processes using the port
-            print(f"[Murmur] Port {PORT} in use, checking for stale murmur-backend...")
-            import subprocess
+            # Kill stale murmur-backend or dev-mode python server on this port
+            print(f"[Murmur] Port {PORT} in use, killing stale process...")
+            import subprocess, os
+            my_pid = os.getpid()
             subprocess.run(
                 ["powershell", "-Command",
                  f"Get-NetTCPConnection -LocalPort {PORT} -ErrorAction SilentlyContinue | "
-                 f"ForEach-Object {{ $p = Get-Process -Id $_.OwningProcess -ErrorAction SilentlyContinue; "
-                 f"if ($p -and $p.Name -eq 'murmur-backend') {{ Stop-Process -Id $_.OwningProcess -Force }} }}"],
+                 f"ForEach-Object {{ $pid = $_.OwningProcess; "
+                 f"if ($pid -ne {my_pid}) {{ "
+                 f"$p = Get-Process -Id $pid -ErrorAction SilentlyContinue; "
+                 f"if ($p -and ($p.Name -eq 'murmur-backend' -or $p.Name -eq 'python')) "
+                 f"{{ Stop-Process -Id $pid -Force }} }} }}"],
                 capture_output=True
             )
             await asyncio.sleep(1)

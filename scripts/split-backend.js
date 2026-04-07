@@ -47,12 +47,16 @@ function main() {
   if (fs.existsSync(OUT_DIR)) fs.rmSync(OUT_DIR, { recursive: true });
   fs.mkdirSync(OUT_DIR, { recursive: true });
 
-  // Step 1: Zip
+  // Step 1: Zip using tar (much faster than PowerShell Compress-Archive)
   console.log(`[1/4] Zipping ${SRC_DIR}...`);
   console.log('       This may take several minutes for ~5 GB of data...');
+  if (fs.existsSync(ZIP_PATH)) fs.unlinkSync(ZIP_PATH);
+  // Use .NET ZipFile directly — much faster than Compress-Archive and avoids memory issues
+  const safeZip = ZIP_PATH.replace(/'/g, "''");
+  const safeSrc = SRC_DIR.replace(/'/g, "''");
   execSync(
-    `powershell.exe -NoProfile -Command "Compress-Archive -Path '${SRC_DIR}\\*' -DestinationPath '${ZIP_PATH}' -Force"`,
-    { stdio: 'inherit', timeout: 1200000 } // 20 min
+    `powershell.exe -NoProfile -Command "Add-Type -Assembly System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::CreateFromDirectory('${safeSrc}', '${safeZip}', [System.IO.Compression.CompressionLevel]::Fastest, $false)"`,
+    { stdio: 'inherit', timeout: 3600000 } // 60 min
   );
 
   const zipSize = fs.statSync(ZIP_PATH).size;
