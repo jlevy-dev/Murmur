@@ -150,34 +150,48 @@ async def handle_message(ws, raw):
                 mic_pcm = audio_utils.decode_base64_pcm(msg["micBase64"])
                 sys_pcm = audio_utils.decode_base64_pcm(msg["sysBase64"])
 
+                # Suppress echo/bleed from speakers into mic
+                await send_progress("Suppressing echo...")
+                mic_pcm = await loop.run_in_executor(
+                    None, audio_utils.suppress_echo, mic_pcm, sys_pcm, sample_rate
+                )
+
                 # Load transcription model
                 await loop.run_in_executor(
                     None, transcribe.load, model_size, sync_progress
                 )
 
-                # Transcribe mic -> "You"
-                await send_progress("Transcribing mic audio...")
-                mic_trimmed = await loop.run_in_executor(
-                    None, audio_utils.trim_silence, mic_pcm, sample_rate
-                )
-                mic_result = await loop.run_in_executor(
-                    None, transcribe.transcribe, mic_trimmed, sample_rate, language, sync_progress
-                )
-
-                # Transcribe system audio
+                # Transcribe system audio first (always has content)
                 await send_progress("Transcribing system audio...")
                 sys_trimmed = await loop.run_in_executor(
                     None, audio_utils.trim_silence, sys_pcm, sample_rate
                 )
-                sys_result = await loop.run_in_executor(
-                    None, transcribe.transcribe, sys_trimmed, sample_rate, language, sync_progress
+                sys_result = {"text": "", "chunks": [], "detectedLanguage": "unknown"}
+                if len(sys_trimmed) > sample_rate // 2:  # at least 0.5s
+                    sys_result = await loop.run_in_executor(
+                        None, transcribe.transcribe, sys_trimmed, sample_rate, language, sync_progress
+                    )
+
+                # Transcribe mic -> "You" (may be empty after echo suppression)
+                mic_result = {"text": "", "chunks": [], "detectedLanguage": "unknown"}
+                mic_trimmed = await loop.run_in_executor(
+                    None, audio_utils.trim_silence, mic_pcm, sample_rate
                 )
+                if len(mic_trimmed) > sample_rate // 2:  # at least 0.5s of speech
+                    await send_progress("Transcribing mic audio...")
+                    mic_result = await loop.run_in_executor(
+                        None, transcribe.transcribe, mic_trimmed, sample_rate, language, sync_progress
+                    )
+                else:
+                    print(f"[Murmur] Mic audio empty after echo suppression, skipping mic transcription")
 
                 # Diarize system audio
-                await send_progress("Diarizing speakers...")
-                sys_chunks = await loop.run_in_executor(
-                    None, diarize.diarize, sys_pcm, sample_rate, sys_result["chunks"], sync_progress
-                )
+                sys_chunks = []
+                if sys_result["chunks"]:
+                    await send_progress("Diarizing speakers...")
+                    sys_chunks = await loop.run_in_executor(
+                        None, diarize.diarize, sys_pcm, sample_rate, sys_result["chunks"], sync_progress
+                    )
 
                 # Tag mic chunks as "You"
                 mic_chunks = [dict(c, speaker="You") for c in mic_result["chunks"]]
@@ -187,11 +201,12 @@ async def handle_message(ws, raw):
                 all_chunks.sort(key=lambda c: c.get("timestamp", [0])[0])
 
                 full_text = " ".join(c["text"].strip() for c in all_chunks)
+                detected_lang = sys_result.get("detectedLanguage") or mic_result.get("detectedLanguage") or "unknown"
 
                 await send_result({
                     "text": full_text,
                     "chunks": all_chunks,
-                    "detectedLanguage": mic_result.get("detectedLanguage", "unknown"),
+                    "detectedLanguage": detected_lang,
                 })
             except Exception as e:
                 traceback.print_exc()

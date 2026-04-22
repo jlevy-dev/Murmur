@@ -726,32 +726,34 @@ ipcMain.handle('transcribe-call', async (_e, micFloat32, sysFloat32, sampleRate)
       return result;
     }
 
-    // Long call — transcribe each channel in chunks, then merge
-    const micResults = [];
-    for (let i = 0; i < micChunks.length; i++) {
-      send('status', `Transcribing mic ${i + 1}/${micChunks.length}…`);
-      const audioBase64 = float32ToBase64(micChunks[i].audio);
-      const result = await sendToPython('transcribe', { audioBase64, sampleRate, modelSize, language });
-      // Tag all chunks as "You"
-      if (result.chunks) result.chunks = result.chunks.map(c => ({ ...c, speaker: 'You' }));
-      micResults.push({ result, offsetSec: micChunks[i].offsetSec });
+    // Long call — send paired chunks as transcribe-call so echo suppression runs
+    const allResults = [];
+    for (let i = 0; i < total; i++) {
+      send('status', `Transcribing chunk ${i + 1}/${total}…`);
+      const micChunk = i < micChunks.length ? micChunks[i].audio : new Float32Array(0);
+      const sysChunk = i < sysChunks.length ? sysChunks[i].audio : new Float32Array(0);
+      const offsetSec = (micChunks[i] || sysChunks[i]).offsetSec;
+
+      const result = await sendToPython('transcribe-call', {
+        micBase64: float32ToBase64(micChunk),
+        sysBase64: float32ToBase64(sysChunk),
+        sampleRate,
+        modelSize,
+        language,
+      });
+
+      // Adjust timestamps
+      if (result.chunks) {
+        result.chunks = result.chunks.map(c => ({
+          ...c,
+          timestamp: c.timestamp ? c.timestamp.map(t => t + offsetSec) : c.timestamp,
+        }));
+      }
+      allResults.push(result);
     }
 
-    const sysResults = [];
-    for (let i = 0; i < sysChunks.length; i++) {
-      send('status', `Transcribing system audio ${i + 1}/${sysChunks.length}…`);
-      const audioBase64 = float32ToBase64(sysChunks[i].audio);
-      const result = await sendToPython('transcribe', { audioBase64, sampleRate, modelSize, language });
-      // Tag system chunks as "Other"
-      if (result.chunks) result.chunks = result.chunks.map(c => ({ ...c, speaker: 'Other' }));
-      sysResults.push({ result, offsetSec: sysChunks[i].offsetSec });
-    }
-
-    // Merge both channels
-    const micMerged = mergeChunkResults(micResults);
-    const sysMerged = mergeChunkResults(sysResults);
-
-    const allChunks = [...micMerged.chunks, ...sysMerged.chunks];
+    // Merge all chunk results
+    const allChunks = allResults.flatMap(r => r.chunks || []);
     allChunks.sort((a, b) => (a.timestamp?.[0] ?? 0) - (b.timestamp?.[0] ?? 0));
 
     const fullText = allChunks.map(c => c.text.trim()).join(' ');
