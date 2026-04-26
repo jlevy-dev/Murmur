@@ -8,17 +8,13 @@ here = os.path.dirname(os.path.abspath(__file__))
 # Modules to exclude – these are not needed for inference and bloat the build
 # ---------------------------------------------------------------------------
 exclude_modules = [
-    # PyTorch components not needed for inference
-    'torch.distributed',
-    'torch.testing',
-    'torch._inductor',
-    'torch._dynamo',
-    'torch._functorch',
-    'torch.ao',                # quantization-aware training utilities
+    # NOTE: torch internals are too interconnected to safely exclude.
+    # Only exclude things that are definitely standalone.
     'torch.utils.tensorboard',
     'caffe2',
 
     # Python stdlib / third-party packages never used at runtime
+    # NOTE: keep stdlib modules (unittest, pydoc, doctest) — many libs import them
     'tkinter',
     'matplotlib',
     'IPython',
@@ -28,14 +24,6 @@ exclude_modules = [
     'nbconvert',
     'nbformat',
     'notebook',
-    'pytest',
-    'setuptools',
-    'pip',
-    'wheel',
-    # 'distutils',  # conflicts with PyInstaller's own hook
-    'unittest',
-    'pydoc',
-    'doctest',
 ]
 
 exclude_flags = []
@@ -86,6 +74,16 @@ PyInstaller.__main__.run([
     '--hidden-import=omegaconf',
     '--hidden-import=hydra',
     '--hidden-import=pytorch_lightning',
+    # pkg_resources sub-modules (PyInstaller misses these vendored deps)
+    '--hidden-import=jaraco.text',
+    '--hidden-import=jaraco.functools',
+    '--hidden-import=jaraco.context',
+    '--hidden-import=jaraco.collections',
+    '--hidden-import=jaraco.classes',
+    '--hidden-import=more_itertools',
+    '--hidden-import=pkg_resources.extern',
+    '--hidden-import=pkg_resources._vendor',
+    '--collect-submodules=pkg_resources',
     # Collect data/resource files for NeMo and its dependencies
     '--collect-data=nemo',
     '--collect-data=nemo_toolkit',
